@@ -1,4 +1,18 @@
-# Air Spawn — Nuclear Option mod
+# Air Spawn
+
+**Start in the air, not on the ramp. Skip the takeoff and get straight to flying.**
+
+[![Latest release](https://img.shields.io/github/v/release/mosdef31/NOAS?style=for-the-badge&label=download&color=2ea043)](https://github.com/mosdef31/NOAS/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/mosdef31/NOAS/total?style=for-the-badge&color=blue)](https://github.com/mosdef31/NOAS/releases)
+[![Game version](https://img.shields.io/badge/Nuclear%20Option-0.34%2B-orange?style=for-the-badge)](https://store.steampowered.com/app/2168680/Nuclear_Option/)
+[![License](https://img.shields.io/badge/license-MIT-lightgrey?style=for-the-badge)](./LICENSE)
+
+📥 **[Download the latest release](https://github.com/mosdef31/NOAS/releases/latest)** &nbsp;·&nbsp;
+📝 **[What's new](https://github.com/mosdef31/NOAS/releases)** &nbsp;·&nbsp;
+🔧 **[How it works](#how-it-works)** &nbsp;·&nbsp;
+🐛 **[Report a bug](https://github.com/mosdef31/NOAS/issues)**
+
+---
 
 Spawns your aircraft in the air at a configurable altitude and airspeed after you pick your loadout, so you can jump straight into testing without repeating the takeoff every time.  AI units and mission-placed aircraft are never affected.
 
