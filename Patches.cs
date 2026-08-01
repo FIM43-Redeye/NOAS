@@ -73,8 +73,12 @@ namespace AirSpawn
                 skill:          1f,
                 bravery:        0.5f);
 
+            // 0.34 added the required Airbase parameter.  Hangar.SpawnAircraft passes
+            // its own parentAirbase field here, so mirror that exactly; the method
+            // falls back to HQ.GetNearestAirbase when it is null.
             if (loadout == null)
-                aircraft.Networkloadout = aircraft.weaponManager.SelectAIAircraftWeapons();
+                aircraft.Networkloadout =
+                    aircraft.weaponManager.SelectAIAircraftWeapons(__instance.parentAirbase);
 
             // Keep spawnedObject populated so the door-close coroutine has a
             // reference.  WaitForUnitToLeave sees the aircraft >50 m away

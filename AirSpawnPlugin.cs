@@ -12,7 +12,7 @@ namespace AirSpawn
     {
         public const string PluginGuid    = "com.mod.airspawn";
         public const string PluginName    = "Air Spawn";
-        public const string PluginVersion = "1.0.0";
+        public const string PluginVersion = "1.1.0";
 
         public static AirSpawnPlugin? Instance { get; private set; }
 

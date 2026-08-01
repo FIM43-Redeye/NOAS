@@ -12,6 +12,19 @@
     <Deterministic>true</Deterministic>
   </PropertyGroup>
 
+  <!-- ── Fail early and clearly on a bad GameDir ───────────────────────────── -->
+  <Target Name="ValidateGamePath" BeforeTargets="ResolveAssemblyReferences">
+    <Error
+      Condition="'$(GameDir)' == 'PASTE YOUR GAME PATH HERE' Or '$(GameDir)' == ''"
+      Text="GameDir is not set. Open GamePath.props and set it to your Nuclear Option install folder." />
+    <Error
+      Condition="!Exists('$(GameDir)\NuclearOption.exe')"
+      Text="NuclearOption.exe not found at '$(GameDir)'. Check the path in GamePath.props." />
+    <Error
+      Condition="!Exists('$(BepInExCoreDir)\BepInEx.dll')"
+      Text="BepInEx not found at '$(BepInExCoreDir)'. Confirm BepInEx is installed in the game folder." />
+  </Target>
+
   <!-- ── Game DLL references ───────────────────────────────────────────────── -->
   <ItemGroup>
     <Reference Include="Assembly-CSharp">

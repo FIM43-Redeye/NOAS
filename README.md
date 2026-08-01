@@ -1,4 +1,4 @@
-# Nuclear Option Air Spawn Mod
+# Air Spawn — Nuclear Option mod
 
 Spawns your aircraft in the air at a configurable altitude and airspeed after you pick your loadout, so you can jump straight into testing without repeating the takeoff every time.  AI units and mission-placed aircraft are never affected.
 
@@ -69,4 +69,6 @@ For carrier spawns the elevator animation plays normally; `SpawnAircraft` is int
 
 ## Compatibility
 
-Tested against Nuclear Option **0.33.4**.  Should work in multiplayer as host (server-side spawn path is the same).  Pure clients cannot trigger spawns and are unaffected.
+Requires Nuclear Option **0.34 or newer** — 0.34 changed a game method this mod
+calls, so v1.1.0 will not load correctly on 0.33.x.  Stay on v1.0.0 for 0.33.4.
+Tested in-game on **0.34**.  Should work in multiplayer as host (server-side spawn path is the same).  Pure clients cannot trigger spawns and are unaffected.
