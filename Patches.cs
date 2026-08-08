@@ -44,19 +44,64 @@ namespace AirSpawn
             if (!cfg.EnableAirSpawn.Value) return true;   // mod off — run original
             if (player == null)            return true;   // AI/supply spawn — never touch
 
-            float altM  = cfg.GetAltitudeFor(definition.jsonKey);
-            float spdMs = cfg.GetAirspeedMsFor(definition.jsonKey);
+            GlobalPosition airPos;
+            Vector3        facing;
+            float          spdMs;
+            float          altM;         // for the log line only when not a scenario
+            bool           headingActive;
+            float          headingDeg;
+            float          fwdOffsetM, rightOffsetM;
 
-            // Level forward vector: strip pitch/roll from the hangar heading so
-            // the aircraft starts in straight-and-level flight.
-            Transform spawnTf      = __instance.GetSpawnTransform();
-            Vector3   levelForward = Vector3.ProjectOnPlane(spawnTf.forward, Vector3.up);
-            if (levelForward.sqrMagnitude < 0.001f) levelForward = Vector3.forward;
-            levelForward.Normalize();
+            if (cfg.TryGetActiveScenario(out GlobalPosition scenPos, out float scenHeadingDeg, out float scenSpdMs))
+            {
+                // A scenario is a saved place: use its absolute position and heading
+                // directly. Altitude, heading override and position offset all exist
+                // only to express "somewhere relative to whichever airbase I spawn
+                // from," which a captured scenario has no need of — see TECHNICAL.md.
+                airPos     = scenPos;
+                facing     = Quaternion.Euler(0f, scenHeadingDeg, 0f) * Vector3.forward;
+                spdMs      = scenSpdMs;
+                altM       = scenPos.y;
+                headingActive = true;
+                headingDeg    = scenHeadingDeg;
+                fwdOffsetM = rightOffsetM = 0f;
+            }
+            else
+            {
+                altM  = cfg.GetAltitudeFor(definition.jsonKey);
+                spdMs = cfg.GetAirspeedMsFor(definition.jsonKey);
 
-            Quaternion    levelRot  = Quaternion.LookRotation(levelForward, Vector3.up);
-            GlobalPosition airPos   = spawnTf.GlobalPosition() + Vector3.up * altM;
-            Vector3        startVel = levelForward * spdMs;
+                // Level runway forward/right: strip pitch/roll from the hangar heading.
+                // Position Offset is always applied along THIS axis pair, never along
+                // an overridden facing — it repositions relative to the airbase layout,
+                // independent of which way the aircraft ends up pointed.
+                Transform spawnTf      = __instance.GetSpawnTransform();
+                Vector3   levelForward = Vector3.ProjectOnPlane(spawnTf.forward, Vector3.up);
+                if (levelForward.sqrMagnitude < 0.001f) levelForward = Vector3.forward;
+                levelForward.Normalize();
+                // Unity identity: right = Cross(up, forward) — left-handed, no negation.
+                Vector3   levelRight   = Vector3.Cross(Vector3.up, levelForward);
+
+                // Facing direction: the runway heading, unless a heading override is
+                // active, in which case an absolute compass heading — 0 = north,
+                // clockwise — replaces it. Compass and Unity's left-handed Y rotation
+                // agree on this convention already: rotating world +Z (north) by
+                // +heading around +Y sweeps toward +X (east).
+                (headingActive, headingDeg) = cfg.GetHeadingOverride(definition.jsonKey);
+                facing = headingActive
+                    ? Quaternion.Euler(0f, headingDeg, 0f) * Vector3.forward
+                    : levelForward;
+
+                (fwdOffsetM, rightOffsetM) = cfg.GetPositionOffset(definition.jsonKey);
+
+                airPos = spawnTf.GlobalPosition()
+                    + levelForward * fwdOffsetM
+                    + levelRight   * rightOffsetM
+                    + Vector3.up   * altM;
+            }
+
+            Quaternion levelRot = Quaternion.LookRotation(facing, Vector3.up);
+            Vector3    startVel = facing * spdMs;
 
             Aircraft aircraft = NetworkSceneSingleton<Spawner>.i.SpawnAircraft(
                 player:         player,
@@ -87,9 +132,13 @@ namespace AirSpawn
 
             string abbr = SpeedConverter.Abbreviation(cfg.SpeedUnit.Value);
             float  disp = SpeedConverter.FromMs(spdMs, cfg.SpeedUnit.Value);
+            string scenPart = cfg.TryGetActiveScenario(out _, out _, out _) ? "  [scenario]" : "";
+            string hdgPart = headingActive ? $"  hdg={headingDeg:F0}deg" : "";
+            string offPart = (fwdOffsetM != 0f || rightOffsetM != 0f)
+                ? $"  offset=({fwdOffsetM:F0},{rightOffsetM:F0})m" : "";
             AirSpawnPlugin.Log.LogInfo(
-                $"[AirSpawn] {definition.unitName}  " +
-                $"alt={altM:F0} m  spd={disp:F0} {abbr}");
+                $"[AirSpawn] {definition.unitName}{scenPart}  " +
+                $"alt={altM:F0} m  spd={disp:F0} {abbr}{hdgPart}{offPart}");
 
             return false; // skip original Hangar.SpawnAircraft
         }

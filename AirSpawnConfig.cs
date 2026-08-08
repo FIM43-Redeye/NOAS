@@ -11,14 +11,25 @@ namespace AirSpawn
     /// Owns every <see cref="ConfigEntry{T}"/> and wires the runtime behaviours:
     ///   • speed-unit conversion when the unit selection changes
     ///   • per-aircraft preset load / auto-save
+    ///   • named scenario preset load / auto-save / dropdown / hotkey cycling
     ///   • aircraft dropdown refresh when <see cref="AircraftRegistry"/> updates
+    ///
+    /// A scenario, if enabled and selected, bypasses the global and per-aircraft
+    /// values entirely — see <see cref="TryGetActiveScenario"/> and
+    /// <c>Patch_Hangar_SpawnAircraft</c>. It is captured live (position, heading,
+    /// airspeed) rather than authored as an offset, because unlike the global or
+    /// per-aircraft settings — which must generalise across every airbase — a
+    /// scenario is inherently tied to one specific place.
     /// </summary>
     internal sealed class AirSpawnConfig
     {
         // ── Constants ────────────────────────────────────────────────────────
         private const string Sec1 = "1 - Air Spawn";
         private const string Sec2 = "2 - Per-Aircraft Presets";
+        private const string Sec3 = "3 - Scenario Presets";
         private const string NoAircraft = "(default)";
+        private const string NoScenario = "(none)";
+        private const string NoPositionDisplay = "(none captured)";
 
         // Airspeed range covers ≈ Mach 3 in every unit:
         //   m/s: 3–1030   km/h: 10–3710   mph: 6–2300   kt: 5–2000
@@ -32,18 +43,32 @@ namespace AirSpawn
         internal ConfigEntry<float>     SpawnAltitude     { get; }   // metres
         internal ConfigEntry<float>     SpawnAirspeed     { get; }   // display unit
         internal ConfigEntry<SpeedUnit> SpeedUnit         { get; }
+        internal ConfigEntry<bool>      EnableHeadingOverride { get; }
+        internal ConfigEntry<float>     SpawnHeadingDeg   { get; }   // degrees, 0 = north
+        internal ConfigEntry<float>     ForwardOffsetM    { get; }   // along runway heading
+        internal ConfigEntry<float>     RightOffsetM      { get; }   // across runway heading
 
         internal ConfigEntry<bool>      EnablePerAircraft { get; }
         internal ConfigEntry<string>    SelectedAircraft  { get; }
         internal ConfigEntry<float>     PresetAltitude    { get; }   // metres
         internal ConfigEntry<float>     PresetAirspeed    { get; }   // display unit
 
+        internal ConfigEntry<bool>      EnableScenarios         { get; }
+        internal ConfigEntry<string>    SelectedScenario        { get; }
+        internal ConfigEntry<string>    ScenarioPositionDisplay { get; }   // read-only
+        internal ConfigEntry<float>     ScenarioHeadingDeg      { get; }   // degrees, 0 = north
+        internal ConfigEntry<float>     ScenarioAirspeed        { get; }   // display unit
+        internal ConfigEntry<KeyboardShortcut> SaveScenarioKey  { get; }
+        internal ConfigEntry<KeyboardShortcut> CycleScenarioKey { get; }
+
         // ── Private state ────────────────────────────────────────────────────
         private readonly PerAircraftPresets _presets;
+        private readonly ScenarioPresets    _scenarios;
         private readonly ManualLogSource    _log;
 
         private SpeedUnit _prevUnit;
         private bool      _loadingPreset;
+        private bool      _loadingScenario;
 
         // ConfigurationManagerAttributes instances held by reference so their
         // Browsable flag can be flipped at runtime.
@@ -54,12 +79,25 @@ namespace AirSpawn
         private readonly ConfigurationManagerAttributes _preSpdAttr =
             new ConfigurationManagerAttributes { Order = 10 };
 
+        private readonly ConfigurationManagerAttributes _scnSelAttr =
+            new ConfigurationManagerAttributes { Order = 40 };
+        private readonly ConfigurationManagerAttributes _scnPosAttr =
+            new ConfigurationManagerAttributes { Order = 30, ReadOnly = true };
+        private readonly ConfigurationManagerAttributes _scnHdgAttr =
+            new ConfigurationManagerAttributes { Order = 20 };
+        private readonly ConfigurationManagerAttributes _scnSpdAttr =
+            new ConfigurationManagerAttributes { Order = 10 };
+
         // AcceptableValueList for the aircraft dropdown and its backing field.
         private readonly AcceptableValueList<string> _aircraftList =
             new AcceptableValueList<string>(NoAircraft);
 
-        // We update the list's backing array at runtime via reflection so that
-        // ConfigurationManager's combo-box renders the full aircraft list.
+        // Same trick for the scenario dropdown.
+        private readonly AcceptableValueList<string> _scenarioList =
+            new AcceptableValueList<string>(NoScenario);
+
+        // We update a list's backing array at runtime via reflection so that
+        // ConfigurationManager's combo-box renders the full aircraft/scenario list.
         private static readonly FieldInfo? AvlBackingField =
             typeof(AcceptableValueList<string>)
                 .GetFields(BindingFlags.NonPublic | BindingFlags.Instance)
@@ -69,10 +107,12 @@ namespace AirSpawn
         internal AirSpawnConfig(
             ConfigFile          cfg,
             PerAircraftPresets  presets,
+            ScenarioPresets     scenarios,
             ManualLogSource     log)
         {
-            _presets  = presets;
-            _log      = log;
+            _presets   = presets;
+            _scenarios = scenarios;
+            _log       = log;
 
             // ── Section 1: Air Spawn ─────────────────────────────────────────
             EnableAirSpawn = cfg.Bind(
@@ -106,6 +146,40 @@ namespace AirSpawn
                     BuildSpeedDesc(150f, AirSpawn.SpeedUnit.MetersPerSecond),
                     new AcceptableValueRange<float>(SpeedMin, SpeedMax),
                     new ConfigurationManagerAttributes { Order = 35 }));
+
+            EnableHeadingOverride = cfg.Bind(
+                Sec1, "Enable Heading Override", false,
+                new ConfigDescription(
+                    "When on, spawn facing Spawn Heading instead of the runway's own heading.\n" +
+                    "This section applies at any airbase, so heading is a compass bearing rather " +
+                    "than a saved place — for a specific remembered spot, use a Scenario instead.",
+                    null,
+                    new ConfigurationManagerAttributes { Order = 32 }));
+
+            SpawnHeadingDeg = cfg.Bind(
+                Sec1, "Spawn Heading", 0f,
+                new ConfigDescription(
+                    "Absolute compass heading in degrees, 0 = north, clockwise. " +
+                    "Only used when Enable Heading Override is on.",
+                    new AcceptableValueRange<float>(0f, 360f),
+                    new ConfigurationManagerAttributes { Order = 31 }));
+
+            ForwardOffsetM = cfg.Bind(
+                Sec1, "Forward Offset", 0f,
+                new ConfigDescription(
+                    "Position offset in metres along the runway's own heading, " +
+                    "applied before altitude and independent of any heading override. " +
+                    "Positive is further down the runway, negative is behind the hangar. " +
+                    "Runway-relative because this section has to work at any airbase.",
+                    new AcceptableValueRange<float>(-5000f, 5000f),
+                    new ConfigurationManagerAttributes { Order = 30 }));
+
+            RightOffsetM = cfg.Bind(
+                Sec1, "Right Offset", 0f,
+                new ConfigDescription(
+                    "Position offset in metres to the right of the runway heading.",
+                    new AcceptableValueRange<float>(-5000f, 5000f),
+                    new ConfigurationManagerAttributes { Order = 29 }));
 
             // ── Section 2: Per-Aircraft Presets ──────────────────────────────
             EnablePerAircraft = cfg.Bind(
@@ -141,9 +215,72 @@ namespace AirSpawn
                     new AcceptableValueRange<float>(SpeedMin, SpeedMax),
                     _preSpdAttr));
 
+            // ── Section 3: Scenario Presets ──────────────────────────────────
+            EnableScenarios = cfg.Bind(
+                Sec3, "Enable Scenarios", false,
+                new ConfigDescription(
+                    "When on, the selected scenario's position, heading and airspeed override " +
+                    "everything above, including per-aircraft presets — a scenario applies to " +
+                    "every aircraft type until you switch or clear it.",
+                    null,
+                    new ConfigurationManagerAttributes { Order = 60 }));
+
+            SelectedScenario = cfg.Bind(
+                Sec3, "Selected Scenario", NoScenario,
+                new ConfigDescription(
+                    "Choose a captured scenario to spawn at. Press SaveScenarioKey while flying " +
+                    "to capture a new one from your current aircraft.",
+                    _scenarioList,
+                    _scnSelAttr));
+
+            ScenarioPositionDisplay = cfg.Bind(
+                Sec3, "Scenario Position", NoPositionDisplay,
+                new ConfigDescription(
+                    "World position captured for the selected scenario. Read-only — " +
+                    "re-capture with SaveScenarioKey to change it.",
+                    null,
+                    _scnPosAttr));
+
+            ScenarioHeadingDeg = cfg.Bind(
+                Sec3, "Scenario Heading", 0f,
+                new ConfigDescription(
+                    "Absolute compass heading in degrees, 0 = north, clockwise, for the " +
+                    "selected scenario. Captured automatically; editable afterwards. Saved automatically.",
+                    new AcceptableValueRange<float>(0f, 360f),
+                    _scnHdgAttr));
+
+            ScenarioAirspeed = cfg.Bind(
+                Sec3, "Scenario Airspeed", 150f,
+                new ConfigDescription(
+                    "Spawn airspeed (in the Speed Unit chosen above) for the selected scenario.\n" +
+                    "Captured automatically; editable afterwards. Saved automatically.",
+                    new AcceptableValueRange<float>(SpeedMin, SpeedMax),
+                    _scnSpdAttr));
+
+            SaveScenarioKey = cfg.Bind(
+                Sec3, "SaveScenarioKey",
+                new KeyboardShortcut(KeyCode.K, KeyCode.LeftAlt),
+                new ConfigDescription(
+                    "While piloting an aircraft, captures its current position, heading and " +
+                    "airspeed as a new scenario (named \"Scenario 1\", \"Scenario 2\", ...), " +
+                    "selects it, and shows a message. Does nothing if you are not in an aircraft.",
+                    null,
+                    new ConfigurationManagerAttributes { Order = 6 }));
+
+            CycleScenarioKey = cfg.Bind(
+                Sec3, "CycleScenarioKey",
+                new KeyboardShortcut(KeyCode.S, KeyCode.LeftAlt),
+                new ConfigDescription(
+                    "Cycles the selected scenario in-game and shows a message: through every " +
+                    "captured scenario in order, then to no active scenario, then back to the " +
+                    "first. Does nothing if no scenario has been captured yet.",
+                    null,
+                    new ConfigurationManagerAttributes { Order = 5 }));
+
             // ── Wire events ──────────────────────────────────────────────────
             _prevUnit = SpeedUnit.Value;
             SetPresetBrowsable(EnablePerAircraft.Value);
+            SetScenarioBrowsable(EnableScenarios.Value);
 
             SpeedUnit.SettingChanged         += OnSpeedUnitChanged;
             EnablePerAircraft.SettingChanged += OnEnablePerAircraftChanged;
@@ -151,7 +288,14 @@ namespace AirSpawn
             PresetAltitude.SettingChanged    += OnPresetValueChanged;
             PresetAirspeed.SettingChanged    += OnPresetValueChanged;
 
-            AircraftRegistry.Updated += RefreshDropdown;
+            EnableScenarios.SettingChanged  += OnEnableScenariosChanged;
+            SelectedScenario.SettingChanged += OnSelectedScenarioChanged;
+            ScenarioHeadingDeg.SettingChanged += OnScenarioValueChanged;
+            ScenarioAirspeed.SettingChanged   += OnScenarioValueChanged;
+
+            AircraftRegistry.Updated += RefreshAircraftDropdown;
+            _scenarios.Updated       += RefreshScenarioDropdown;
+            RefreshScenarioDropdown();
         }
 
         // ── Public helpers used by patches ────────────────────────────────────
@@ -176,6 +320,82 @@ namespace AirSpawn
             return spdMs;
         }
 
+        /// <summary>
+        /// Whether a heading override is active for this spawn, and the absolute
+        /// compass heading in degrees if so. Only the global setting — a scenario,
+        /// if active, is handled entirely by <see cref="TryGetActiveScenario"/>
+        /// instead, upstream of this call; per-aircraft presets never carry heading.
+        /// </summary>
+        internal (bool active, float headingDeg) GetHeadingOverride(string jsonKey) =>
+            EnableHeadingOverride.Value ? (true, SpawnHeadingDeg.Value) : (false, 0f);
+
+        /// <summary>
+        /// Position offset in metres, (forward along the runway heading, right
+        /// across it), for <paramref name="jsonKey"/>. Defaults to (0, 0) — a
+        /// no-op — so this is always safe to apply.
+        /// </summary>
+        internal (float forwardM, float rightM) GetPositionOffset(string jsonKey) =>
+            (ForwardOffsetM.Value, RightOffsetM.Value);
+
+        /// <summary>
+        /// If a scenario is enabled and the selection names one that has actually
+        /// been captured, returns its absolute world position, compass heading and
+        /// airspeed and takes over the whole spawn — bypassing altitude, heading
+        /// override and position offset entirely, since those exist only to
+        /// express "somewhere relative to whichever airbase I spawn from," which a
+        /// captured scenario has no need of.
+        /// </summary>
+        internal bool TryGetActiveScenario(out GlobalPosition position, out float headingDeg, out float airspeedMs)
+        {
+            if (EnableScenarios.Value && _scenarios.Contains(SelectedScenario.Value))
+            {
+                (position, headingDeg, airspeedMs) = _scenarios.Get(SelectedScenario.Value);
+                return true;
+            }
+
+            position = default;
+            headingDeg = 0f;
+            airspeedMs = 0f;
+            return false;
+        }
+
+        /// <summary>
+        /// Captures <paramref name="position"/>/<paramref name="headingDeg"/>/
+        /// <paramref name="airspeedMs"/> as a new, auto-named scenario, selects it,
+        /// and returns a human-readable line for the caller to show as a message.
+        /// </summary>
+        internal string CaptureScenario(GlobalPosition position, float headingDeg, float airspeedMs)
+        {
+            string name = _scenarios.NextAutoName();
+            _scenarios.Set(name, position, headingDeg, airspeedMs);
+            SelectedScenario.Value = name; // triggers OnSelectedScenarioChanged → loads the display fields
+            return $"Air Spawn scenario captured: {name}  ({position}  hdg={headingDeg:F0}°)";
+        }
+
+        /// <summary>
+        /// Advances <see cref="SelectedScenario"/> to the next name in cycle
+        /// order (then to "no active scenario", then back to the first), and
+        /// returns a human-readable line describing the result — or null if no
+        /// scenario has been captured yet, so the caller can skip showing a
+        /// message.
+        /// </summary>
+        internal string? CycleScenario()
+        {
+            var names = _scenarios.Names;
+            if (names.Length == 0) return null;
+
+            int current = Array.IndexOf(names, SelectedScenario.Value);
+            // current == -1 covers both "no active scenario" and "a name that
+            // no longer exists" — either way the next state is the first entry.
+            string next = current + 1 < names.Length ? names[current + 1] : NoScenario;
+
+            SelectedScenario.Value = next;
+
+            return next == NoScenario
+                ? "Air Spawn scenario: none (global / per-aircraft values apply)"
+                : $"Air Spawn scenario: {next}";
+        }
+
         // ── Event handlers ────────────────────────────────────────────────────
 
         private void OnSpeedUnitChanged(object sender, EventArgs e)
@@ -197,6 +417,16 @@ namespace AirSpawn
                 // No need to re-save: the preset file stores m/s and hasn't changed.
             }
 
+            // Same conversion for the displayed scenario airspeed.
+            if (SelectedScenario.Value != NoScenario)
+            {
+                float scenarioMs = SpeedConverter.ToMs(ScenarioAirspeed.Value, _prevUnit);
+                _loadingScenario = true;
+                ScenarioAirspeed.Value = Mathf.Round(SpeedConverter.FromMs(scenarioMs, newUnit));
+                _loadingScenario = false;
+                // No need to re-save: the scenario file stores m/s and hasn't changed.
+            }
+
             _prevUnit = newUnit;
 
             _log.LogInfo(
@@ -209,6 +439,11 @@ namespace AirSpawn
             SetPresetBrowsable(EnablePerAircraft.Value);
         }
 
+        private void OnEnableScenariosChanged(object sender, EventArgs e)
+        {
+            SetScenarioBrowsable(EnableScenarios.Value);
+        }
+
         private void OnSelectedAircraftChanged(object sender, EventArgs e)
         {
             LoadPresetForSelected();
@@ -218,6 +453,17 @@ namespace AirSpawn
         {
             if (_loadingPreset) return;
             SaveCurrentPreset();
+        }
+
+        private void OnSelectedScenarioChanged(object sender, EventArgs e)
+        {
+            LoadScenarioForSelected();
+        }
+
+        private void OnScenarioValueChanged(object sender, EventArgs e)
+        {
+            if (_loadingScenario) return;
+            SaveCurrentScenario();
         }
 
         // ── Preset load / save ────────────────────────────────────────────────
@@ -261,9 +507,53 @@ namespace AirSpawn
                 SpeedConverter.ToMs(PresetAirspeed.Value, SpeedUnit.Value));
         }
 
+        // ── Scenario load / save ─────────────────────────────────────────────
+
+        private void LoadScenarioForSelected()
+        {
+            _loadingScenario = true;
+            try
+            {
+                var name = SelectedScenario.Value;
+                if (name == NoScenario || !_scenarios.Contains(name))
+                {
+                    ScenarioPositionDisplay.Value = NoPositionDisplay;
+                    ScenarioHeadingDeg.Value       = 0f;
+                    ScenarioAirspeed.Value         = SpawnAirspeed.Value;
+                    return;
+                }
+
+                var (pos, hdg, spdMs) = _scenarios.Get(name);
+
+                ScenarioPositionDisplay.Value = pos.ToString();
+                ScenarioHeadingDeg.Value      = hdg;
+                ScenarioAirspeed.Value        = Mathf.Round(SpeedConverter.FromMs(spdMs, SpeedUnit.Value));
+            }
+            finally
+            {
+                _loadingScenario = false;
+            }
+        }
+
+        private void SaveCurrentScenario()
+        {
+            var name = SelectedScenario.Value;
+            if (name == NoScenario || !_scenarios.Contains(name)) return;
+
+            // Heading/airspeed may have been hand-edited; position is
+            // capture-only, so carry the stored value over unchanged.
+            var (pos, _, _) = _scenarios.Get(name);
+
+            _scenarios.Set(
+                name,
+                pos,
+                ScenarioHeadingDeg.Value,
+                SpeedConverter.ToMs(ScenarioAirspeed.Value, SpeedUnit.Value));
+        }
+
         // ── Dropdown refresh ──────────────────────────────────────────────────
 
-        private void RefreshDropdown()
+        private void RefreshAircraftDropdown()
         {
             if (AvlBackingField == null)
             {
@@ -288,6 +578,27 @@ namespace AirSpawn
                 $"[AirSpawn] Aircraft dropdown refreshed — {values.Length - 1} entries.");
         }
 
+        private void RefreshScenarioDropdown()
+        {
+            if (AvlBackingField == null)
+            {
+                _log.LogWarning(
+                    "[AirSpawn] Could not update scenario dropdown: " +
+                    "AcceptableValueList backing field not found. " +
+                    "Type the scenario name manually into Selected Scenario.");
+                return;
+            }
+
+            var values = new[] { NoScenario }
+                .Concat(_scenarios.Names)
+                .ToArray();
+
+            AvlBackingField.SetValue(_scenarioList, values);
+
+            _log.LogDebug(
+                $"[AirSpawn] Scenario dropdown refreshed — {values.Length - 1} entries.");
+        }
+
         // ── Helpers ───────────────────────────────────────────────────────────
 
         private float GetGlobalAirspeedMs() =>
@@ -298,6 +609,14 @@ namespace AirSpawn
             _selAttr.Browsable    = visible;
             _preAltAttr.Browsable = visible;
             _preSpdAttr.Browsable = visible;
+        }
+
+        private void SetScenarioBrowsable(bool visible)
+        {
+            _scnSelAttr.Browsable = visible;
+            _scnPosAttr.Browsable = visible;
+            _scnHdgAttr.Browsable = visible;
+            _scnSpdAttr.Browsable = visible;
         }
 
         private static string BuildSpeedDesc(float defaultMs, SpeedUnit unit)

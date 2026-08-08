@@ -43,6 +43,11 @@
       <HintPath>$(ManagedDir)\UnityEngine.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- Rigidbody, for reading the piloted aircraft's velocity when capturing a scenario. -->
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(ManagedDir)\UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <!-- ── BepInEx references ────────────────────────────────────────────────── -->

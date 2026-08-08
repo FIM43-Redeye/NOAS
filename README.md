@@ -42,6 +42,10 @@ All settings live in `com.mod.airspawn.cfg`.  With ConfigurationManager installe
 | **Speed Unit** | `MetersPerSecond` | Unit for all airspeed inputs: `MetersPerSecond`, `KilometersPerHour`, `MilesPerHour`, `Knots`. Changing this auto-converts existing values. |
 | **Spawn Altitude** | `1500` | Height in metres above the airbase. Gear retracts and throttle initialises automatically. |
 | **Spawn Airspeed** | `150` | Forward speed at spawn, in the selected unit. Default 150 m/s ≈ 291 kt ≈ 540 km/h ≈ 336 mph. |
+| **Enable Heading Override** | `false` | When on, spawn facing **Spawn Heading** instead of the runway's own heading. |
+| **Spawn Heading** | `0` | Absolute compass heading in degrees, 0 = north, clockwise. Only read when Enable Heading Override is on. |
+| **Forward Offset** | `0` | Position offset in metres along the runway's own heading, applied before altitude — independent of any heading override. Positive is further down the runway. |
+| **Right Offset** | `0` | Position offset in metres to the right of the runway heading. |
 
 ### 2 — Per-Aircraft Presets
 
@@ -54,7 +58,23 @@ All settings live in `com.mod.airspawn.cfg`.  With ConfigurationManager installe
 
 > **Note:** The dropdown and preset fields are hidden when Per-Aircraft Presets is disabled.  If they don't appear after toggling, close and re-open the config window (F1 → F1).
 
-Presets are stored separately in `BepInEx/config/AirSpawnPresets.cfg`.  Each section is an aircraft `jsonKey`; altitudes are in metres and airspeeds are in m/s regardless of your display-unit setting.
+Presets are stored separately in `BepInEx/config/AirSpawnPresets.cfg`.  Each section is an aircraft `jsonKey`; altitudes are in metres and airspeeds are in m/s regardless of your display-unit setting. Presets cover altitude and airspeed only — not heading or position, which are a Section 3 concern.
+
+### 3 — Scenario Presets
+
+Named, exact spawn points — captured live from your own aircraft with a keybind, then picked from a menu, instead of dialling in numbers by hand. Fly to where you want, press **`LeftAlt + K`**, and that exact position, heading and airspeed are saved and selected. Fly somewhere else and do it again to build up a list, then pick between them from **Selected Scenario** or step through them with **`LeftAlt + S`**.
+
+| Setting | Default | Description |
+|---|---|---|
+| **Enable Scenarios** | `false` | When on, the selected scenario's position, heading and airspeed override *everything above*, including per-aircraft presets — a scenario applies to every aircraft type until you switch or clear it. |
+| **Selected Scenario** | `(none)` | Dropdown of captured scenarios. Choose one to spawn there next. |
+| **Scenario Position** | *(read-only)* | The captured world position, shown for reference. Re-capture with SaveScenarioKey to change it — there's no field to type coordinates into. |
+| **Scenario Heading** | `0` | Absolute compass heading in degrees, 0 = north, clockwise. Captured automatically; nudge it by hand afterwards if you want. |
+| **Scenario Airspeed** | `150` | Airspeed for the selected scenario, in the active unit. Captured automatically; editable afterwards. |
+| **SaveScenarioKey** | `LeftAlt + K` | While piloting an aircraft, captures its current position, heading and airspeed as a new scenario ("Scenario 1", "Scenario 2", ...), selects it, and shows a message. Does nothing if you're not in an aircraft. |
+| **CycleScenarioKey** | `LeftAlt + S` | Cycles through every captured scenario, then to no active scenario, then back to the first. Shows an in-game message. Does nothing if no scenario has been captured yet. |
+
+Scenarios are stored separately in `BepInEx/config/AirSpawnScenarios.cfg`, one section per scenario name, as an absolute world position rather than an offset — a scenario is a specific remembered place, not a rule that has to work at every airbase the way the global and per-aircraft settings do. See `TECHNICAL.md` if you're curious why those two use different coordinate systems.
 
 ---
 
@@ -62,10 +82,12 @@ Presets are stored separately in `BepInEx/config/AirSpawnPresets.cfg`.  Each sec
 
 The normal spawn path calls a private `Hangar.SpawnAircraft` which routes through `Spawner.SpawnAircraft` with the hangar's transform and zero velocity.  This mod prefixes that private method and, for player spawns, calls `Spawner.SpawnAircraft` directly with:
 
-- **Position** — hangar XZ + configured altitude
-- **Rotation** — level, same heading as the hangar runway
-- **Velocity** — forward × configured airspeed
+- **Position** — hangar XZ, offset along the runway's own heading by Forward/Right Offset, then raised by the configured altitude
+- **Rotation** — the runway heading, unless a heading override (global or scenario) is active, in which case an absolute compass heading replaces it
+- **Velocity** — the spawn's actual facing (post-override) × configured airspeed
 - **`spawningHangar = null`** — tells every client to position from `NetworkstartPosition` / `NetworkstartingVelocity` rather than the hangar transform
+
+Position Offset is always measured along the runway's own axes, never along an overridden heading — it repositions relative to the airbase layout independent of which way the aircraft ends up pointed. This whole path is skipped when a scenario is active: a scenario supplies an absolute position and heading captured directly from your aircraft, with no airbase or runway involved at all. See `TECHNICAL.md` for the coordinate math and why scenarios use a different coordinate system from everything else.
 
 Because `Aircraft.OnStartClient` already checks whether radar altitude exceeds the spawn offset (~2 m) and auto-retracts gear and sets throttle when it does, no extra work is needed for flight initialisation.
 
