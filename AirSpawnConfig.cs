@@ -27,6 +27,7 @@ namespace AirSpawn
         private const string Sec1 = "1 - Air Spawn";
         private const string Sec2 = "2 - Per-Aircraft Presets";
         private const string Sec3 = "3 - Scenario Presets";
+        private const string Sec4 = "4 - Runway Spawn";
         private const string NoAircraft = "(default)";
         private const string NoScenario = "(none)";
         private const string NoPositionDisplay = "(none captured)";
@@ -60,6 +61,8 @@ namespace AirSpawn
         internal ConfigEntry<float>     ScenarioAirspeed        { get; }   // display unit
         internal ConfigEntry<KeyboardShortcut> SaveScenarioKey  { get; }
         internal ConfigEntry<KeyboardShortcut> CycleScenarioKey { get; }
+
+        internal ConfigEntry<bool>      EnableRunwaySpawn { get; }
 
         // ── Private state ────────────────────────────────────────────────────
         private readonly PerAircraftPresets _presets;
@@ -276,6 +279,20 @@ namespace AirSpawn
                     "first. Does nothing if no scenario has been captured yet.",
                     null,
                     new ConfigurationManagerAttributes { Order = 5 }));
+
+            // ── Section 4: Runway Spawn ──────────────────────────────────────
+            EnableRunwaySpawn = cfg.Bind(
+                Sec4, "Enable Runway Spawn", false,
+                new ConfigDescription(
+                    "When on, player aircraft spawn at the start of a free takeoff runway, " +
+                    "lined up and ready to go, instead of in the hangar. Land airbases only; " +
+                    "carriers spawn as normal.\n" +
+                    "The runway is held for you until you take off or leave it, so AI aircraft " +
+                    "wait instead of taxiing onto it.\n" +
+                    "If no runway is free (an aircraft is landing, queued or on it), you spawn " +
+                    "in the air when air spawn is enabled, otherwise in the hangar.",
+                    null,
+                    new ConfigurationManagerAttributes { Order = 50 }));
 
             // ── Wire events ──────────────────────────────────────────────────
             _prevUnit = SpeedUnit.Value;

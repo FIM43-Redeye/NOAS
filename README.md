@@ -76,6 +76,16 @@ Named, exact spawn points — captured live from your own aircraft with a keybin
 
 Scenarios are stored separately in `BepInEx/config/AirSpawnScenarios.cfg`, one section per scenario name, as an absolute world position rather than an offset — a scenario is a specific remembered place, not a rule that has to work at every airbase the way the global and per-aircraft settings do. See `TECHNICAL.md` if you're curious why those two use different coordinate systems.
 
+### 4 — Runway Spawn
+
+Skip the taxi instead of the takeoff: spawn lined up at the start of a runway, at rest, and take off yourself (takeoff music included).
+
+| Setting | Default | Description |
+|---|---|---|
+| **Enable Runway Spawn** | `false` | When on, player aircraft spawn at the start of the nearest free takeoff runway long enough for them, pointed down it. Land airbases only; carriers spawn as normal. If no runway is free, you get an air spawn when **Enable** (section 1) is on, otherwise the normal hangar spawn. |
+
+A runway counts as free when nobody is landing on it or queued to take off from it (or from a runway crossing it), and no aircraft is sitting on it. Once you spawn, you're put at the head of the runway's takeoff queue, so AI aircraft hold short until you're airborne or have left the runway. AI *landings* don't consult that queue (in the base game either), so don't park there for long. Another player on final approach isn't tracked by the game's runway traffic, so it won't stop a runway spawn either.
+
 ---
 
 ## How it works

@@ -41,8 +41,15 @@ namespace AirSpawn
         {
             AirSpawnConfig cfg = AirSpawnPlugin.Instance!.Settings;
 
-            if (!cfg.EnableAirSpawn.Value) return true;   // mod off — run original
             if (player == null)            return true;   // AI/supply spawn — never touch
+
+            // Runway spawn first; with no free runway, fall through to an air
+            // spawn if that is enabled too, otherwise to the normal hangar spawn.
+            if (cfg.EnableRunwaySpawn.Value &&
+                RunwaySpawn.TrySpawn(__instance, player, definition, loadout, fuelLevel, livery))
+                return false;
+
+            if (!cfg.EnableAirSpawn.Value) return true;   // air spawn off — run original
 
             GlobalPosition airPos;
             Vector3        facing;
