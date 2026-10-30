@@ -46,6 +46,7 @@ All settings live in `com.mod.airspawn.cfg`.  With ConfigurationManager installe
 | **Spawn Heading** | `0` | Absolute compass heading in degrees, 0 = north, clockwise. Only read when Enable Heading Override is on. |
 | **Forward Offset** | `0` | Position offset in metres along the runway's own heading, applied before altitude — independent of any heading override. Positive is further down the runway. |
 | **Right Offset** | `0` | Position offset in metres to the right of the runway heading. |
+| **Launch Acceleration** | `4` | You spawn held in place with your gear down, then get accelerated straight ahead at this many g (like a catapult shot) up to Spawn Airspeed. Then you're released and the gear comes up. Starting from rest means the takeoff music, flaps and slats, and modded parts behave as they would on a normal takeoff. |
 
 ### 2 — Per-Aircraft Presets
 
@@ -89,7 +90,9 @@ The normal spawn path calls a private `Hangar.SpawnAircraft` which routes throug
 
 Position Offset is always measured along the runway's own axes, never along an overridden heading — it repositions relative to the airbase layout independent of which way the aircraft ends up pointed. This whole path is skipped when a scenario is active: a scenario supplies an absolute position and heading captured directly from your aircraft, with no airbase or runway involved at all. See `TECHNICAL.md` for the coordinate math and why scenarios use a different coordinate system from everything else.
 
-Because `Aircraft.OnStartClient` already checks whether radar altitude exceeds the spawn offset (~2 m) and auto-retracts gear and sets throttle when it does, no extra work is needed for flight initialisation.
+Because `Aircraft.OnStartClient` already checks whether radar altitude exceeds the spawn offset (~2 m) and auto-retracts gear and sets throttle when it does, the engines and throttle need no extra work.
+
+Spawning straight at speed does skip what happens between rest and flight, though. The game plays the takeoff music from `Aircraft.CheckRadarAlt` only when the aircraft first leaves the ground *with its gear down*, and speed-scheduled flaps and slats (`HighLiftDevice`) only animate when their target changes, so an aircraft spawned above their retract speed keeps whatever pose its model was built with. So on the local player's own machine, a postfix on `Aircraft.OnStartClient` turns the spawn into a launch: it puts the gear back down the way a ground spawn initialises it, holds the aircraft's attitude and height while accelerating it from rest along the spawn heading at **Launch Acceleration**, and releases it at the spawn velocity with the gear coming up. Everything that watches speed and gear sees a normal takeoff. A multiplayer client without the mod gets the plain air spawn at full speed. While **Enable** is on, a player aircraft placed in the air by a mission (no hangar, already airborne) gets the same launch, since the client can't tell the two apart.
 
 For carrier spawns the elevator animation plays normally; `SpawnAircraft` is intercepted once the animation finishes and the aircraft is placed in the air from that point.
 
