@@ -57,11 +57,25 @@ namespace AirSpawn
         private float      _targetSpeed;
         private float      _acceleration;   // m/s²
         private float      _speed;
+        private float      _heldFor;        // s
+
+        // The game's own "has left the ground" flag, set by CheckRadarAlt,
+        // which also starts the takeoff music when the gear is down.
+        private static readonly AccessTools.FieldRef<Aircraft, bool> Airborne =
+            AccessTools.FieldRefAccess<Aircraft, bool>("airborne");
+
+        // CheckRadarAlt first runs 0.1 s after spawning; never hold longer than
+        // this waiting for it.
+        private const float MaxHoldForAirborne = 1f;
 
         internal static void Begin(Aircraft aircraft, Vector3 spawnVelocity, float acceleration)
         {
+            // A spawn at rest (a helicopter, say) still gets the gear-down start,
+            // released as soon as the game has seen it airborne.
             float targetSpeed = spawnVelocity.magnitude;
-            if (targetSpeed < 1f) return;
+            Vector3 direction = targetSpeed > 0.01f
+                ? spawnVelocity / targetSpeed
+                : aircraft.transform.forward;
 
             // Put the gear back down the way a ground spawn initialises it:
             // from Uninitialized, GearStateChanged snaps straight to
@@ -77,7 +91,7 @@ namespace AirSpawn
             AirLaunch launch = aircraft.gameObject.AddComponent<AirLaunch>();
             launch._aircraft     = aircraft;
             launch._rotation     = aircraft.transform.rotation;
-            launch._direction    = spawnVelocity / targetSpeed;
+            launch._direction    = direction;
             launch._targetSpeed  = targetSpeed;
             launch._acceleration = acceleration;
         }
@@ -93,9 +107,11 @@ namespace AirSpawn
 
             Rigidbody rb = _aircraft.rb;
             _speed = Mathf.Min(_speed + _acceleration * Time.fixedDeltaTime, _targetSpeed);
+            _heldFor += Time.fixedDeltaTime;
             rb.angularVelocity = Vector3.zero;
 
-            if (_speed >= _targetSpeed)
+            bool seenAirborne = Airborne(_aircraft) || _heldFor >= MaxHoldForAirborne;
+            if (_speed >= _targetSpeed && seenAirborne)
             {
                 rb.velocity = _direction * _targetSpeed;
                 _aircraft.SetGear(deployed: false);
