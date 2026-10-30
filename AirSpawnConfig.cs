@@ -286,11 +286,10 @@ namespace AirSpawn
                 new ConfigDescription(
                     "When on, player aircraft spawn at the start of a free takeoff runway, " +
                     "lined up and ready to go, instead of in the hangar. Land airbases only; " +
-                    "carriers spawn as normal.\n" +
-                    "The runway is held for you until you take off or leave it, so AI aircraft " +
-                    "wait instead of taxiing onto it.\n" +
-                    "If no runway is free (an aircraft is landing, queued or on it), you spawn " +
-                    "in the air when air spawn is enabled, otherwise in the hangar.",
+                    "carriers, and aircraft that need no takeoff run (helicopters), spawn as normal.\n" +
+                    "If no runway is free, you wait in line for one, and AI aircraft holding " +
+                    "short wait with you. The runway is then held for you until you take off " +
+                    "or leave it.",
                     null,
                     new ConfigurationManagerAttributes { Order = 50 }));
 

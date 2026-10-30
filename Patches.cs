@@ -43,9 +43,12 @@ namespace AirSpawn
 
             if (player == null)            return true;   // AI/supply spawn — never touch
 
-            // Runway spawn first; with no free runway, fall through to an air
-            // spawn if that is enabled too, otherwise to the normal hangar spawn.
-            if (cfg.EnableRunwaySpawn.Value &&
+            // Runway spawn first. Patch_Hangar_TrySpawnAircraft has already
+            // queued the player if no runway was free, so this only falls through
+            // where runway spawn doesn't apply (no suitable runway, a carrier, a
+            // helicopter) or the player chose to leave the queue: to an air spawn
+            // if that is enabled too, otherwise to the normal hangar spawn.
+            if (cfg.EnableRunwaySpawn.Value && !RunwayQueue.Bypass &&
                 RunwaySpawn.TrySpawn(__instance, player, definition, loadout, fuelLevel, livery))
                 return false;
 

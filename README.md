@@ -82,9 +82,13 @@ Skip the taxi instead of the takeoff: spawn lined up at the start of a runway, a
 
 | Setting | Default | Description |
 |---|---|---|
-| **Enable Runway Spawn** | `false` | When on, player aircraft spawn at the start of the nearest free takeoff runway long enough for them, pointed down it. Land airbases only; carriers spawn as normal. If no runway is free, you get an air spawn when **Enable** (section 1) is on, otherwise the normal hangar spawn. |
+| **Enable Runway Spawn** | `false` | When on, player aircraft spawn at the start of the nearest free takeoff runway long enough for them, pointed down it. Land airbases only; carriers, and aircraft that need no takeoff run (helicopters), spawn as normal. If no runway is free, you wait in line for one. |
 
-A runway counts as free when nobody is landing on it or queued to take off from it (or from a runway crossing it), and no aircraft is sitting on it. Once you spawn, you're put at the head of the runway's takeoff queue, so AI aircraft hold short until you're airborne or have left the runway. AI *landings* don't consult that queue (in the base game either), so don't park there for long. Another player on final approach isn't tracked by the game's runway traffic, so it won't stop a runway spawn either.
+A runway counts as free when nobody is landing on it or queued to take off from it (or from a runway crossing it), and no aircraft is sitting on it.
+
+If none is free when you press Fly, your spawn is accepted as a delayed spawn (the same way carriers wait for their elevator) and a **Waiting for a runway** window shows your place in line. While anyone is waiting, AI aircraft holding short stay there; AI already entering the runway or on their takeoff roll carry on and clear it, and so do AI landings. Players are served first come, first served, on whichever suitable runway frees up first. The window's button lets you give up and spawn in the air (if **Enable** in section 1 is on) or in a hangar instead. The window is drawn by the host, so in multiplayer only the host sees it for their own spawn; other players simply wait for their aircraft to appear.
+
+Once you spawn, you're put at the head of the runway's takeoff queue, so AI aircraft hold short until you're airborne or have left the runway. AI *landings* don't consult that queue (in the base game either), so don't park there for long. Another player on final approach isn't tracked by the game's runway traffic, so it won't stop a runway spawn either.
 
 ---
 

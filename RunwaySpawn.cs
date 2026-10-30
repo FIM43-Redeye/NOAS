@@ -54,17 +54,12 @@ namespace AirSpawn
             float              fuelLevel,
             LiveryKey          livery)
         {
+            if (!Applies(hangar, definition)) return false;
             Airbase airbase = hangar.parentAirbase;
-            if (airbase == null || airbase.runways == null) return false;
-            if (hangar.attachedUnit is Ship) return false;
 
             if (!TryPickRunway(airbase, hangar.GetSpawnTransform(), definition,
                     out Airbase.Runway runway, out bool reverse))
-            {
-                AirSpawnPlugin.Log.LogInfo(
-                    $"[AirSpawn] {definition.unitName}  no free runway at {airbase.name}");
                 return false;
-            }
 
             var usage = new Airbase.Runway.RunwayUsage(runway, reverse);
             Vector3    direction = usage.GetDirection().normalized;
@@ -111,6 +106,34 @@ namespace AirSpawn
         }
 
         /// <summary>
+        /// Whether runway spawn applies at all: a land airbase with at least one
+        /// takeoff runway long enough, and an aircraft that needs a takeoff run
+        /// (helicopters and other aircraft with no takeoff speed spawn as usual).
+        /// </summary>
+        internal static bool Applies(Hangar hangar, AircraftDefinition definition)
+        {
+            Airbase airbase = hangar.parentAirbase;
+            if (airbase == null || airbase.runways == null) return false;
+            if (hangar.attachedUnit is Ship) return false;
+            if (definition.aircraftParameters.takeoffSpeed <= 0f) return false;
+
+            foreach (Airbase.Runway runway in airbase.runways)
+                if (IsCandidate(runway, definition)) return true;
+            return false;
+        }
+
+        internal static bool IsCandidate(Airbase.Runway runway, AircraftDefinition definition) =>
+            runway != null && runway.Takeoff &&
+            runway.Length >= definition.aircraftParameters.takeoffDistance;
+
+        internal static bool AnyFree(Airbase airbase, AircraftDefinition definition)
+        {
+            foreach (Airbase.Runway runway in airbase.runways)
+                if (IsCandidate(runway, definition) && IsFree(runway)) return true;
+            return false;
+        }
+
+        /// <summary>
         /// The nearest free takeoff runway long enough for the aircraft, using
         /// the game's own distance and direction choice (Runway.GetDistance
         /// keeps the direction AI have used in the last 30 s).
@@ -128,9 +151,7 @@ namespace AirSpawn
 
             foreach (Airbase.Runway candidate in airbase.runways)
             {
-                if (candidate == null || !candidate.Takeoff) continue;
-                if (candidate.Length < definition.aircraftParameters.takeoffDistance) continue;
-                if (!IsFree(candidate)) continue;
+                if (!IsCandidate(candidate, definition) || !IsFree(candidate)) continue;
 
                 Airbase.Runway.RunwayDistanceResult distance = candidate.GetDistance(from);
                 if (distance.Distance < best)
