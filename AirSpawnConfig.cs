@@ -185,9 +185,9 @@ namespace AirSpawn
             LaunchAccelerationG = cfg.Bind(
                 Sec1, "Launch Acceleration", 4f,
                 new ConfigDescription(
-                    "The aircraft spawns held in place with its gear down, then is accelerated " +
-                    "straight ahead at this many g, like a catapult launch, until it reaches the " +
-                    "spawn airspeed. Then it is released and the gear comes up.\n" +
+                    "The aircraft spawns held in place with its gear down, which starts coming up " +
+                    "straight away, and is accelerated straight ahead at this many g, like a " +
+                    "catapult launch, until it reaches the spawn airspeed. Then it is released.\n" +
                     "Starting from rest lets everything that reacts to speed and gear (takeoff " +
                     "music, flaps and slats, modded parts) behave as it would on a normal takeoff. " +
                     "Default 4 g, about a real carrier catapult.",

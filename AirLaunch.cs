@@ -9,8 +9,9 @@ namespace AirSpawn
     // Patch 2 — Aircraft.OnStartClient (private)
     //
     // Turns an air spawn into an air launch: the aircraft starts held in place
-    // with its gear down, is accelerated straight ahead like a catapult shot
-    // until it reaches the spawn airspeed, then is released and raises its gear.
+    // with its gear down, starts raising it as soon as the game has seen it
+    // airborne, and is accelerated straight ahead like a catapult shot until
+    // it reaches the spawn airspeed, then released.
     //
     // Spawning directly at speed skips everything the game and its aircraft
     // expect to see on the way from rest to flight:
@@ -65,6 +66,7 @@ namespace AirSpawn
         private float      _acceleration;   // m/s²
         private float      _speed;
         private float      _heldFor;        // s
+        private bool       _gearRaised;
 
         // The game's own "has left the ground" flag, set by CheckRadarAlt,
         // which also starts the takeoff music when the gear is down.
@@ -151,11 +153,20 @@ namespace AirSpawn
             _speed = Mathf.Min(_speed + _acceleration * Time.fixedDeltaTime, _targetSpeed);
             _heldFor += Time.fixedDeltaTime;
 
+            // Raise the gear as soon as the game has registered the aircraft as
+            // airborne: that check (CheckRadarAlt) is what starts the takeoff
+            // music, and only while the gear is down. The gear then folds during
+            // the launch instead of hanging out at full speed.
             bool seenAirborne = Airborne(_aircraft) || _heldFor >= MaxHoldForAirborne;
+            if (seenAirborne && !_gearRaised)
+            {
+                _aircraft.SetGear(deployed: false);
+                _gearRaised = true;
+            }
+
             if (_speed >= _targetSpeed && seenAirborne)
             {
                 SetMotion(_direction * _targetSpeed, Vector3.zero, holdAgainstGravity: false);
-                _aircraft.SetGear(deployed: false);
                 Destroy(this);
                 return;
             }
