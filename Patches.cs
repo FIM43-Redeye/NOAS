@@ -69,7 +69,7 @@ namespace AirSpawn
             else
             {
                 altM  = cfg.GetAltitudeFor(definition.jsonKey);
-                spdMs = cfg.GetAirspeedMsFor(definition.jsonKey);
+                spdMs = cfg.GetAirspeedMsFor(definition);
 
                 // Level runway forward/right: strip pitch/roll from the runway heading.
                 // Position Offset is always applied along THIS axis pair, never along

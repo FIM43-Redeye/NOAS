@@ -41,6 +41,7 @@ All settings live in `com.mod.airspawn.cfg`.  With ConfigurationManager installe
 | **Enable** | `false` | Master switch. Toggle per session without restarting. |
 | **Speed Unit** | `MetersPerSecond` | Unit for all airspeed inputs: `MetersPerSecond`, `KilometersPerHour`, `MilesPerHour`, `Knots`. Changing this auto-converts existing values. |
 | **Spawn Altitude** | `1500` | Height in metres above the airbase. Gear retracts and throttle initialises automatically. |
+| **Automatic Airspeed** | `false` | When on, each aircraft spawns at its own corner speed from the game's data (`AircraftParameters.cornerSpeed`, what the AI and fly-by-wire treat as best for manoeuvring: 90 m/s for the Cricket, 180 m/s for most fighters) instead of Spawn Airspeed. Aircraft with no takeoff speed, like helicopters, spawn at rest; their corner speed is at or above their top speed. Works for modded aircraft too, since it reads each aircraft's own data. Saved per-aircraft presets still win. |
 | **Spawn Airspeed** | `150` | Forward speed at spawn, in the selected unit. Default 150 m/s ≈ 291 kt ≈ 540 km/h ≈ 336 mph. |
 | **Enable Heading Override** | `false` | When on, spawn facing **Spawn Heading** instead of the runway's own heading. |
 | **Spawn Heading** | `0` | Absolute compass heading in degrees, 0 = north, clockwise. Only read when Enable Heading Override is on. |

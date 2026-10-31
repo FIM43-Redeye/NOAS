@@ -42,6 +42,7 @@ namespace AirSpawn
         internal ConfigEntry<bool>      EnableAirSpawn    { get; }
         internal ConfigEntry<float>     SpawnAltitude     { get; }   // metres
         internal ConfigEntry<float>     SpawnAirspeed     { get; }   // display unit
+        internal ConfigEntry<bool>      AutoAirspeed      { get; }
         internal ConfigEntry<SpeedUnit> SpeedUnit         { get; }
         internal ConfigEntry<bool>      EnableHeadingOverride { get; }
         internal ConfigEntry<float>     SpawnHeadingDeg   { get; }   // degrees, 0 = north
@@ -140,6 +141,16 @@ namespace AirSpawn
                     "Gear retracts and throttle initialises automatically at any altitude above ~2 m.",
                     new AcceptableValueRange<float>(100f, 15000f),
                     new ConfigurationManagerAttributes { Order = 40 }));
+
+            AutoAirspeed = cfg.Bind(
+                Sec1, "Automatic Airspeed", false,
+                new ConfigDescription(
+                    "When on, each aircraft spawns at its own corner speed (the speed the game " +
+                    "treats as best for manoeuvring) instead of Spawn Airspeed. Aircraft that " +
+                    "need no takeoff run, like helicopters, spawn at rest.\n" +
+                    "Saved per-aircraft presets still win when Per-Aircraft Presets is on.",
+                    null,
+                    new ConfigurationManagerAttributes { Order = 37 }));
 
             SpawnAirspeed = cfg.Bind(
                 Sec1, "Spawn Airspeed", 150f,
@@ -323,14 +334,37 @@ namespace AirSpawn
             return altM;
         }
 
-        /// <summary>Spawn airspeed in m/s for <paramref name="jsonKey"/>.</summary>
-        internal float GetAirspeedMsFor(string jsonKey)
+        /// <summary>
+        /// Spawn airspeed in m/s for <paramref name="definition"/>: its per-aircraft
+        /// preset if presets are on, otherwise the automatic or global airspeed.
+        /// </summary>
+        internal float GetAirspeedMsFor(AircraftDefinition definition)
         {
-            if (!EnablePerAircraft.Value || !AircraftRegistry.Contains(jsonKey))
-                return GetGlobalAirspeedMs();
+            float fallbackMs = AutoAirspeed.Value
+                ? AutoAirspeedMs(definition) ?? GetGlobalAirspeedMs()
+                : GetGlobalAirspeedMs();
 
-            var (_, spdMs) = _presets.Get(jsonKey, SpawnAltitude.Value, GetGlobalAirspeedMs());
+            string jsonKey = definition.jsonKey;
+            if (!EnablePerAircraft.Value || !AircraftRegistry.Contains(jsonKey))
+                return fallbackMs;
+
+            var (_, spdMs) = _presets.Get(jsonKey, SpawnAltitude.Value, fallbackMs);
             return spdMs;
+        }
+
+        /// <summary>
+        /// The aircraft's own speed from its AircraftParameters, or null if it
+        /// has none. Aircraft that need a takeoff run get their corner speed, the
+        /// speed the game's AI and flight controls treat as best for manoeuvring.
+        /// Aircraft with no takeoff speed (helicopters) start at rest.
+        /// </summary>
+        private static float? AutoAirspeedMs(AircraftDefinition definition)
+        {
+            AircraftParameters? p = definition.aircraftParameters;
+            if (p == null)              return null;
+            if (p.takeoffSpeed <= 0f)   return 0f;
+            if (p.cornerSpeed  <= 0f)   return null;
+            return p.cornerSpeed;
         }
 
         /// <summary>
