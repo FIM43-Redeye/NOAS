@@ -83,7 +83,7 @@ Scenarios are stored separately in `BepInEx/config/AirSpawnScenarios.cfg`, one s
 The normal spawn path calls a private `Hangar.SpawnAircraft` which routes through `Spawner.SpawnAircraft` with the hangar's transform and zero velocity.  This mod prefixes that private method and, for player spawns, calls `Spawner.SpawnAircraft` directly with:
 
 - **Position** — hangar XZ, offset along the runway's own heading by Forward/Right Offset, then raised by the configured altitude
-- **Rotation** — the runway heading, unless a heading override (global or scenario) is active, in which case an absolute compass heading replaces it
+- **Rotation** — the runway heading, unless a heading override (global or scenario) is active, in which case an absolute compass heading replaces it. The runway is the airbase's takeoff runway nearest the hangar (preferring ones long enough for the aircraft), in the direction AI have been using; on a carrier that's the flight deck. Only an airbase with no takeoff runway falls back to the hangar's own facing, since hangars face their taxiway and a carrier's spawn point is its elevator.
 - **Velocity** — the spawn's actual facing (post-override) × configured airspeed
 - **`spawningHangar = null`** — tells every client to position from `NetworkstartPosition` / `NetworkstartingVelocity` rather than the hangar transform
 
