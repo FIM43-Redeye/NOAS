@@ -71,12 +71,17 @@ namespace AirSpawn
                 altM  = cfg.GetAltitudeFor(definition.jsonKey);
                 spdMs = cfg.GetAirspeedMsFor(definition.jsonKey);
 
-                // Level runway forward/right: strip pitch/roll from the hangar heading.
+                // Level runway forward/right: strip pitch/roll from the runway heading.
                 // Position Offset is always applied along THIS axis pair, never along
                 // an overridden facing — it repositions relative to the airbase layout,
                 // independent of which way the aircraft ends up pointed.
+                // The hangar's own facing is only the fallback: hangars face their
+                // taxiway, and a carrier's spawn point is its elevator, which faces
+                // across the deck.
                 Transform spawnTf      = __instance.GetSpawnTransform();
-                Vector3   levelForward = Vector3.ProjectOnPlane(spawnTf.forward, Vector3.up);
+                Vector3   runwayDir    = TakeoffRunwayDirection(__instance, definition, spawnTf)
+                                         ?? spawnTf.forward;
+                Vector3   levelForward = Vector3.ProjectOnPlane(runwayDir, Vector3.up);
                 if (levelForward.sqrMagnitude < 0.001f) levelForward = Vector3.forward;
                 levelForward.Normalize();
                 // Unity identity: right = Cross(up, forward) — left-handed, no negation.
@@ -141,6 +146,43 @@ namespace AirSpawn
                 $"alt={altM:F0} m  spd={disp:F0} {abbr}{hdgPart}{offPart}");
 
             return false; // skip original Hangar.SpawnAircraft
+        }
+
+        /// <summary>
+        /// Takeoff direction of the airbase's takeoff runway nearest the hangar,
+        /// preferring runways long enough for the aircraft, or null if the
+        /// airbase has none. Runway.GetDistance picks the end AI have been using
+        /// for the last 30 s, else the nearer end, so this matches local traffic.
+        /// On a carrier this is the flight deck.
+        /// </summary>
+        private static Vector3? TakeoffRunwayDirection(
+            Hangar hangar, AircraftDefinition definition, Transform from)
+        {
+            Airbase airbase = hangar.parentAirbase;
+            if (airbase == null || airbase.runways == null) return null;
+
+            Airbase.Runway? best = null;
+            bool  bestReverse = false, bestLongEnough = false;
+            float bestDistance = float.MaxValue;
+            float needed = definition.aircraftParameters.takeoffDistance;
+
+            foreach (Airbase.Runway runway in airbase.runways)
+            {
+                if (runway == null || !runway.Takeoff) continue;
+
+                bool longEnough = runway.Length >= needed;
+                Airbase.Runway.RunwayDistanceResult distance = runway.GetDistance(from);
+                bool better = longEnough != bestLongEnough
+                    ? longEnough
+                    : distance.Distance < bestDistance;
+                if (best != null && !better) continue;
+
+                best           = runway;
+                bestReverse    = distance.Reverse;
+                bestLongEnough = longEnough;
+                bestDistance   = distance.Distance;
+            }
+            return best?.GetDirection(bestReverse);
         }
     }
 
