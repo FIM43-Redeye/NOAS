@@ -39,6 +39,7 @@ namespace AirSpawn
             Settings      = new AirSpawnConfig(Config, presets, scenarios, Logger);
 
             _harmony.PatchAll(Assembly.GetExecutingAssembly());
+            gameObject.AddComponent<RunwayQueue>();
 
             Logger.LogInfo($"[{PluginName}] v{PluginVersion} loaded.");
         }
